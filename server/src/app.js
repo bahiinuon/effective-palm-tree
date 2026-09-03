@@ -6,7 +6,8 @@ import { loadCatalog, priceRequest } from './catalog.js';
 import { createRequestStore, publicView } from './requests.js';
 import { createRequestSchema, updateRequestSchema, STATUSES } from './schema.js';
 import { createPaymentProvider } from './payments.js';
-import { notifyNewRequest } from './notify.js';
+import { createMailer } from './email.js';
+import { createNotifier } from './notifications.js';
 import { rateLimit } from './rate-limit.js';
 
 const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));
@@ -41,6 +42,8 @@ export function createApp({
   catalog = loadCatalog(),
   payments = createPaymentProvider(),
   log = console,
+  mailer = createMailer(process.env, log),
+  notifier = createNotifier({ mailer, catalog, log }),
   rateLimitMax = Number(process.env.REQUEST_RATE_LIMIT ?? 5),
 } = {}) {
   const store = createRequestStore(db);
@@ -52,7 +55,7 @@ export function createApp({
    * Stripe signs the exact bytes it sent, so this route has to see the raw body.
    * It is registered before the JSON parser for that reason - do not move it.
    */
-  app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+  app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
     if (payments.name !== 'stripe') {
       return res.status(404).json({ error: 'not_found', message: 'Stripe is not enabled.' });
     }
@@ -83,8 +86,11 @@ export function createApp({
       return res.json({ received: true, applied: false });
     }
 
-    store.update(record.id, outcome.patch);
+    const updated = store.update(record.id, outcome.patch);
     log.info(`[stripe] ${event.type} -> ${record.reference} is ${outcome.patch.paymentStatus}`);
+
+    if (outcome.patch.paymentStatus === 'paid') await notifier.paymentReceived(updated);
+
     return res.json({ received: true, applied: true });
   });
 
@@ -145,7 +151,7 @@ export function createApp({
       if (payment.paymentRef) patch.paymentRef = payment.paymentRef;
       record = store.update(record.id, patch);
 
-      notifyNewRequest(record, pricing, log);
+      await notifier.briefReceived(record, pricing, payment);
 
       return res.status(201).json({ request: publicView(record, catalog), payment });
     } catch (err) {
@@ -186,13 +192,28 @@ export function createApp({
     return res.json({ request: record });
   });
 
-  app.patch('/api/admin/requests/:id', requireAdmin, (req, res) => {
+  app.patch('/api/admin/requests/:id', requireAdmin, async (req, res, next) => {
     const parsed = updateRequestSchema.safeParse(req.body);
     if (!parsed.success) return validationError(res, parsed.error);
     if (!store.get(req.params.id)) {
       return res.status(404).json({ error: 'not_found', message: 'No such request.' });
     }
-    return res.json({ request: store.update(req.params.id, parsed.data) });
+
+    try {
+      let record = store.update(req.params.id, parsed.data);
+
+      // The song goes out when it is both marked delivered and has a link -
+      // in either order - and the stamp makes sure that happens exactly once.
+      const readyToSend = record.status === 'delivered' && record.deliveryUrl;
+      if (readyToSend && !record.deliveredEmailAt) {
+        const sent = await notifier.songDelivered(record);
+        if (sent) record = store.update(record.id, { deliveredEmailAt: new Date().toISOString() });
+      }
+
+      return res.json({ request: record });
+    } catch (err) {
+      return next(err);
+    }
   });
 
   /** A payment link for a brief you've read and decided to take on. */
@@ -216,7 +237,10 @@ export function createApp({
         paymentStatus: checkout.status,
         paymentRef: checkout.paymentRef ?? null,
       });
-      return res.json({ request: updated, checkoutUrl: checkout.checkoutUrl });
+
+      const emailed = await notifier.paymentLinkReady(updated, checkout.checkoutUrl);
+
+      return res.json({ request: updated, checkoutUrl: checkout.checkoutUrl, emailed });
     } catch (err) {
       return next(err);
     }

@@ -81,6 +81,8 @@ export type AdminRequest = {
   neededBy: string | null;
   sharePublicly: boolean;
   artistNotes: string | null;
+  /** Set the first time the finished song is emailed out, so it only goes once. */
+  deliveredEmailAt: string | null;
 };
 
 export type FieldError = { path: string; message: string };

@@ -203,6 +203,7 @@ function RequestDetail({
   const [deliveryUrl, setDeliveryUrl] = useState(request.deliveryUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [minting, setMinting] = useState(false);
 
@@ -212,6 +213,7 @@ function RequestDetail({
     try {
       const result = await adminCreateCheckout(token, request.id);
       setCheckoutUrl(result.checkoutUrl);
+      setEmailed(result.emailed);
       onCharged(result.request);
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : 'Could not create a payment link.');
@@ -297,7 +299,9 @@ function RequestDetail({
           </button>
           {checkoutUrl && (
             <p className="notice">
-              Send this to {request.fanName}:{' '}
+              {emailed
+                ? `Emailed to ${request.fanName}. Here it is if you want to send it yourself: `
+                : `Couldn't email it, so send this to ${request.fanName} yourself: `}
               <a href={checkoutUrl} target="_blank" rel="noreferrer">
                 {checkoutUrl}
               </a>
@@ -318,6 +322,11 @@ function RequestDetail({
           onChange={(e) => setDeliveryUrl(e.target.value)}
           placeholder="https://…"
         />
+        <span className="field-hint">
+          {request.deliveredEmailAt
+            ? `Emailed to ${request.fanName} on ${new Date(request.deliveredEmailAt).toLocaleDateString('en-GB')}.`
+            : 'Saved with the status on Delivered, this emails the song to them - once.'}
+        </span>
       </label>
 
       <label className="field">

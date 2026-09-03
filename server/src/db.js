@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS requests (
 
   artist_notes   TEXT,
   delivery_url   TEXT,
+  delivered_email_at TEXT,
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL
 );
@@ -39,11 +40,25 @@ CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requests_email ON requests(fan_email);
 `;
 
+// Columns added after the first release. SQLite has no "ADD COLUMN IF NOT
+// EXISTS", so each one is checked before it is added.
+const ADDED_COLUMNS = [['requests', 'delivered_email_at', 'TEXT']];
+
+function migrate(db) {
+  for (const [table, column, type] of ADDED_COLUMNS) {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!existing.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    }
+  }
+}
+
 export function openDatabase(file = process.env.DATABASE_FILE || 'data/requests.db') {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }

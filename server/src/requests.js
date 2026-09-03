@@ -35,6 +35,7 @@ function toRecord(row) {
     sharePublicly: Boolean(row.share_publicly),
     artistNotes: row.artist_notes,
     deliveryUrl: row.delivery_url,
+    deliveredEmailAt: row.delivered_email_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -116,6 +117,7 @@ export function createRequestStore(db) {
         paymentRef: 'payment_ref',
         artistNotes: 'artist_notes',
         deliveryUrl: 'delivery_url',
+        deliveredEmailAt: 'delivered_email_at',
       };
       const sets = [];
       const params = {};

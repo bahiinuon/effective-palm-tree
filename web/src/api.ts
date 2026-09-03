@@ -83,10 +83,13 @@ export const adminUpdate = (
   });
 
 export const adminCreateCheckout = (token: string, id: string) =>
-  request<{ request: AdminRequest; checkoutUrl: string }>(`/api/admin/requests/${id}/checkout`, {
-    method: 'POST',
-    headers: auth(token),
-  });
+  request<{ request: AdminRequest; checkoutUrl: string; emailed: boolean }>(
+    `/api/admin/requests/${id}/checkout`,
+    {
+      method: 'POST',
+      headers: auth(token),
+    },
+  );
 
 export function formatMoney(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat('en-GB', {

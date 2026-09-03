@@ -125,13 +125,37 @@ pays what they agreed to.
 - **A payment failure never loses a brief.** If Stripe is unreachable when a
   request comes in, the brief is still saved and the fan is told you'll send a
   link by hand.
-- **Notifications are a `console.info` for now.** Point
-  [`server/src/notify.js`](server/src/notify.js) at email or a phone push when
-  you want to hear about a request without watching the dashboard.
+- **Email is best-effort, always.** A mail server having a bad day can never
+  turn a fan's request into an error or undo a payment that already cleared:
+  failures are logged and the work carries on. Sends are capped at ten seconds
+  so a hung SMTP server can't hold a browser open.
+- **The finished song is emailed exactly once**, stamped on the record, so
+  editing a delivered request later doesn't send it again.
+
+## Email
+
+Five messages, all optional — with no `SMTP_URL` they're logged instead of sent,
+and the app runs fine without any of it.
+
+| When | Who | What |
+| --- | --- | --- |
+| A brief arrives | you | The whole brief, and who sent it |
+| A brief arrives | the fan | Their reference and what happens next |
+| You create a payment link | the fan | The Stripe link, ready to pay |
+| A payment clears | you | Time to start writing |
+| Delivered, with a link | the fan | Their song |
+
+Set `SMTP_URL`, `MAIL_FROM` and `ARTIST_EMAIL` to turn them on — any SMTP
+service will do, and `.env.example` has connection strings for a few. Emails to
+fans are signed with `ARTIST_NAME` and reply to `MAIL_REPLY_TO` (or
+`ARTIST_EMAIL`), so a fan replying reaches you rather than a black hole.
+
+Nothing is sent when you decline a request — that message is better written by
+hand than by an app.
 
 ## Not built yet
 
-Email to the fan (confirmation, delivery, revision requests), file upload for
+Revision-request emails, file upload for
 finished songs (the delivery link is a URL you paste), and a public gallery of
 songs fans agreed to share — `sharePublicly` is already recorded on every
 request, ready for it.
