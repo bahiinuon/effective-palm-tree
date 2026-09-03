@@ -156,13 +156,6 @@ function stripeProvider(env) {
             patch: { paymentStatus: 'unpaid' },
           };
         }
-        case 'charge.refunded': {
-          const charge = event.data.object;
-          return {
-            match: { paymentRef: charge.payment_intent },
-            patch: { paymentStatus: 'refunded' },
-          };
-        }
         default:
           return null;
       }

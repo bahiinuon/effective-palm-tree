@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const STATUSES = ['new', 'accepted', 'writing', 'delivered', 'declined', 'cancelled'];
-export const PAYMENT_STATUSES = ['unpaid', 'pending', 'paid', 'refunded'];
+export const PAYMENT_STATUSES = ['unpaid', 'pending', 'paid'];
 
 const trimmed = (max) => z.string().trim().max(max);
 const optionalText = (max) =>

@@ -148,7 +148,7 @@ describe('stripe checkout, charging up front', () => {
 
     const record = await adminGet(id);
     assert.equal(record.paymentStatus, 'paid');
-    assert.equal(record.paymentRef, 'pi_test_999', 'the payment intent is kept for refunds');
+    assert.equal(record.paymentRef, 'pi_test_999', 'the payment intent is kept on the record');
 
     // A late expiry event must not undo a completed payment.
     const stale = JSON.stringify({
@@ -177,33 +177,6 @@ describe('stripe checkout, charging up front', () => {
     const res = await sendWebhook(event, stripeSignature(event));
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { received: true, applied: false });
-  });
-
-  it('records a refund against the payment intent', async () => {
-    const created = await (await submit()).json();
-    const id = await requestIdFor(created.request.reference);
-
-    const paid = JSON.stringify({
-      id: 'evt_5',
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          payment_status: 'paid',
-          payment_intent: 'pi_refund_me',
-          metadata: { requestId: id },
-        },
-      },
-    });
-    await sendWebhook(paid, stripeSignature(paid));
-
-    const refund = JSON.stringify({
-      id: 'evt_6',
-      type: 'charge.refunded',
-      data: { object: { payment_intent: 'pi_refund_me' } },
-    });
-    const res = await sendWebhook(refund, stripeSignature(refund));
-    assert.deepEqual(await res.json(), { received: true, applied: true });
-    assert.equal((await adminGet(id)).paymentStatus, 'refunded');
   });
 
   it('mints a payment link from the queue for a request taken on later', async () => {

@@ -281,7 +281,7 @@ function RequestDetail({
             value={request.paymentStatus}
             onChange={(e) => void onPatch(request.id, { paymentStatus: e.target.value })}
           >
-            {['unpaid', 'pending', 'paid', 'refunded'].map((status) => (
+            {['unpaid', 'pending', 'paid'].map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>

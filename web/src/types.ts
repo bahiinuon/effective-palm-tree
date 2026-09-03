@@ -38,7 +38,7 @@ export type RequestStatus =
   | 'declined'
   | 'cancelled';
 
-export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'refunded';
+export type PaymentStatus = 'unpaid' | 'pending' | 'paid';
 
 export type PublicRequest = {
   reference: string;

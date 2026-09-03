@@ -71,7 +71,6 @@ export function createApp({
     const record =
       (outcome.match.requestId && store.get(outcome.match.requestId)) ||
       (outcome.match.reference && store.getByReference(outcome.match.reference)) ||
-      (outcome.match.paymentRef && store.getByPaymentRef(outcome.match.paymentRef)) ||
       null;
 
     if (!record) {

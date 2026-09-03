@@ -67,9 +67,8 @@ it up.
 | `POST` | `/api/admin/requests/:id/checkout` | `Bearer $ADMIN_TOKEN` |
 
 A request moves: `new → accepted → writing → delivered`, with `declined` and
-`cancelled` as exits. Payment is tracked separately
-(`unpaid`/`pending`/`paid`/`refunded`) so you can accept a brief before any
-money changes hands.
+`cancelled` as exits. Payment is tracked separately (`unpaid`/`pending`/`paid`)
+so you can accept a brief before any money changes hands.
 
 ## Taking payment
 
@@ -81,8 +80,8 @@ have read their brief and said yes (see `STRIPE_CHARGE_AT` below).
 1. Put your secret key in `STRIPE_SECRET_KEY` (`sk_test_…` until you're ready).
 2. In the Stripe dashboard, add a webhook endpoint at
    `https://your-domain/api/webhooks/stripe` subscribed to
-   `checkout.session.completed`, `checkout.session.expired` and
-   `charge.refunded`, and put its signing secret in `STRIPE_WEBHOOK_SECRET`.
+   `checkout.session.completed` and `checkout.session.expired`, and put its
+   signing secret in `STRIPE_WEBHOOK_SECRET`.
 3. Set `PUBLIC_URL` to the site's real origin so Stripe can send fans back.
 
 Locally you can forward events with the Stripe CLI:
@@ -133,7 +132,10 @@ pays what they agreed to.
 ## Not built yet
 
 Email to the fan (confirmation, delivery, revision requests), file upload for
-finished songs (the delivery link is a URL you paste), refund initiation (if you ever
-do refund one, do it in the Stripe dashboard — the webhook will mark the
-request `refunded` here), and a public gallery of songs fans agreed to share —
-`sharePublicly` is already recorded on every request, ready for it.
+finished songs (the delivery link is a URL you paste), and a public gallery of
+songs fans agreed to share — `sharePublicly` is already recorded on every
+request, ready for it.
+
+Refunds are deliberately not modelled. Issue one in the Stripe dashboard if you
+ever need to; this app won't hear about it, so the request will still read
+`paid` here.
