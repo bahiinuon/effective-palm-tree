@@ -1,0 +1,73 @@
+{
+  "currency": "GBP",
+  "tiers": [
+    {
+      "id": "ditty",
+      "name": "The Ditty",
+      "tagline": "A short, personal hook you'll have stuck in your head all week.",
+      "priceMinor": 4500,
+      "lengthLabel": "30-60 seconds",
+      "turnaroundDays": 7,
+      "revisions": 0,
+      "deliverables": [
+        "One verse-and-hook idea, written and performed live",
+        "Voice and one instrument",
+        "MP3 + a vertical video you can share"
+      ],
+      "sortOrder": 1
+    },
+    {
+      "id": "acoustic",
+      "name": "Full Song, Acoustic",
+      "tagline": "A complete song, start to finish, just voice and guitar.",
+      "priceMinor": 15000,
+      "lengthLabel": "2.5-4 minutes",
+      "turnaroundDays": 14,
+      "revisions": 1,
+      "deliverables": [
+        "Full lyrics written around your brief",
+        "Verses, chorus and a bridge",
+        "Studio-recorded acoustic performance",
+        "WAV + MP3, plus a lyric sheet"
+      ],
+      "sortOrder": 2
+    },
+    {
+      "id": "produced",
+      "name": "Produced Track",
+      "tagline": "The full record: arranged, produced, mixed and mastered.",
+      "priceMinor": 40000,
+      "lengthLabel": "3-5 minutes",
+      "turnaroundDays": 28,
+      "revisions": 2,
+      "deliverables": [
+        "Everything in the acoustic tier",
+        "Full band arrangement and production",
+        "Mixed and mastered master",
+        "Instrumental version",
+        "Optional release to streaming platforms"
+      ],
+      "sortOrder": 3
+    }
+  ],
+  "addOns": [
+    {
+      "id": "rush",
+      "name": "Rush delivery",
+      "description": "Halves the turnaround time on your tier.",
+      "priceMinor": 7500
+    },
+    {
+      "id": "extra_revision",
+      "name": "Extra revision round",
+      "description": "One more pass on lyrics or performance after delivery.",
+      "priceMinor": 3500
+    },
+    {
+      "id": "video",
+      "name": "Performance video",
+      "description": "A filmed performance of your song, edited and delivered in landscape and vertical.",
+      "priceMinor": 9500
+    }
+  ]
+}
