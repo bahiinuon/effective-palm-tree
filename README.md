@@ -135,7 +135,3 @@ Email to the fan (confirmation, delivery, revision requests), file upload for
 finished songs (the delivery link is a URL you paste), and a public gallery of
 songs fans agreed to share — `sharePublicly` is already recorded on every
 request, ready for it.
-
-Refunds are deliberately not modelled. Issue one in the Stripe dashboard if you
-ever need to; this app won't hear about it, so the request will still read
-`paid` here.
