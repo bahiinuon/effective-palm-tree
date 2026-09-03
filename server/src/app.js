@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { loadCatalog, priceRequest } from './catalog.js';
 import { createRequestStore, publicView } from './requests.js';
 import { createRequestSchema, updateRequestSchema, STATUSES } from './schema.js';
-import { getPaymentProvider } from './payments.js';
+import { createPaymentProvider } from './payments.js';
 import { notifyNewRequest } from './notify.js';
 import { rateLimit } from './rate-limit.js';
 
@@ -39,21 +39,80 @@ function requireAdmin(req, res, next) {
 export function createApp({
   db,
   catalog = loadCatalog(),
+  payments = createPaymentProvider(),
   log = console,
   rateLimitMax = Number(process.env.REQUEST_RATE_LIMIT ?? 5),
 } = {}) {
   const store = createRequestStore(db);
-  const pay = getPaymentProvider();
   const app = express();
 
   app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+
+  /**
+   * Stripe signs the exact bytes it sent, so this route has to see the raw body.
+   * It is registered before the JSON parser for that reason - do not move it.
+   */
+  app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+    if (payments.name !== 'stripe') {
+      return res.status(404).json({ error: 'not_found', message: 'Stripe is not enabled.' });
+    }
+
+    let event;
+    try {
+      event = payments.verifyWebhook(req.body, req.get('stripe-signature') ?? '');
+    } catch (err) {
+      log.warn('[stripe] rejected webhook:', err.message);
+      return res.status(400).json({ error: 'bad_signature', message: 'Could not verify that event.' });
+    }
+
+    const outcome = payments.interpretEvent(event);
+    if (!outcome) return res.json({ received: true, applied: false });
+
+    const record =
+      (outcome.match.requestId && store.get(outcome.match.requestId)) ||
+      (outcome.match.reference && store.getByReference(outcome.match.reference)) ||
+      (outcome.match.paymentRef && store.getByPaymentRef(outcome.match.paymentRef)) ||
+      null;
+
+    if (!record) {
+      log.warn(`[stripe] ${event.type} did not match any request`);
+      return res.json({ received: true, applied: false });
+    }
+
+    // Events can arrive late or out of order; a stale one must never undo a payment.
+    if (outcome.patch.paymentStatus === 'unpaid' && record.paymentStatus !== 'pending') {
+      return res.json({ received: true, applied: false });
+    }
+
+    store.update(record.id, outcome.patch);
+    log.info(`[stripe] ${event.type} -> ${record.reference} is ${outcome.patch.paymentStatus}`);
+    return res.json({ received: true, applied: true });
+  });
+
   app.use(express.json({ limit: '64kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-  app.get('/api/catalog', (_req, res) => res.json(catalog));
+  app.get('/api/catalog', (_req, res) =>
+    res.json({
+      ...catalog,
+      payment: { provider: payments.name, chargeUpFront: payments.chargeUpFront },
+    }),
+  );
 
-  app.post('/api/requests', rateLimit({ max: rateLimitMax }), (req, res) => {
+  /** How a line on a Stripe receipt should read for this request. */
+  function describe(record) {
+    const tier = catalog.tiers.find((t) => t.id === record.tierId);
+    const addOns = record.addOnIds
+      .map((id) => catalog.addOns.find((a) => a.id === id)?.name ?? id)
+      .join(', ');
+    return {
+      name: tier ? `${tier.name} - custom song` : 'Custom song',
+      detail: addOns ? `With ${addOns}` : 'Written to your brief',
+    };
+  }
+
+  app.post('/api/requests', rateLimit({ max: rateLimitMax }), async (req, res, next) => {
     const parsed = createRequestSchema.safeParse(req.body);
     if (!parsed.success) return validationError(res, parsed.error);
 
@@ -61,21 +120,39 @@ export function createApp({
     try {
       pricing = priceRequest(catalog, parsed.data.tierId, parsed.data.addOnIds);
     } catch (err) {
-      return res.status(400).json({
-        error: 'unknown_option',
-        message: err.message,
-      });
+      return res.status(400).json({ error: 'unknown_option', message: err.message });
     }
 
-    let record = store.create(parsed.data, pricing);
-    const payment = pay({ pricing, request: record });
-    if (payment.status !== record.paymentStatus) {
-      record = store.update(record.id, { paymentStatus: payment.status });
+    try {
+      let record = store.create(parsed.data, pricing);
+
+      let payment;
+      try {
+        payment = await payments.begin({ pricing, request: record, describe: describe(record) });
+      } catch (err) {
+        // The brief is already saved - losing it because a card processor blinked
+        // would be the worse failure, so fall back to invoicing by hand.
+        log.error('[payment] could not start checkout:', err);
+        payment = {
+          provider: payments.name,
+          status: 'unpaid',
+          instructions:
+            "I've got your brief, but the payment page didn't load. Nothing has been charged - " +
+            "I'll email you a payment link instead.",
+        };
+      }
+
+      const patch = { paymentStatus: payment.status };
+      if (payment.paymentRef) patch.paymentRef = payment.paymentRef;
+      record = store.update(record.id, patch);
+
+      notifyNewRequest(record, pricing, log);
+
+      return res.status(201).json({ request: publicView(record, catalog), payment });
+    } catch (err) {
+      // Express 4 does not catch rejected promises from async handlers.
+      return next(err);
     }
-
-    notifyNewRequest(record, pricing, log);
-
-    return res.status(201).json({ request: publicView(record, catalog), payment });
   });
 
   // A fan checks on their own song with the reference plus the email they used.
@@ -117,6 +194,33 @@ export function createApp({
       return res.status(404).json({ error: 'not_found', message: 'No such request.' });
     }
     return res.json({ request: store.update(req.params.id, parsed.data) });
+  });
+
+  /** A payment link for a brief you've read and decided to take on. */
+  app.post('/api/admin/requests/:id/checkout', requireAdmin, async (req, res, next) => {
+    const record = store.get(req.params.id);
+    if (!record) return res.status(404).json({ error: 'not_found', message: 'No such request.' });
+
+    if (!payments.supportsCheckout) {
+      return res.status(409).json({
+        error: 'no_checkout',
+        message: `The ${payments.name} payment provider has no checkout links.`,
+      });
+    }
+    if (record.paymentStatus === 'paid') {
+      return res.status(409).json({ error: 'already_paid', message: 'This one is already paid.' });
+    }
+
+    try {
+      const checkout = await payments.createCheckout({ request: record, describe: describe(record) });
+      const updated = store.update(record.id, {
+        paymentStatus: checkout.status,
+        paymentRef: checkout.paymentRef ?? null,
+      });
+      return res.json({ request: updated, checkoutUrl: checkout.checkoutUrl });
+    } catch (err) {
+      return next(err);
+    }
   });
 
   if (existsSync(webDist)) {

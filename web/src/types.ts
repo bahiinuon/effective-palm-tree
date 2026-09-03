@@ -21,6 +21,13 @@ export type Catalog = {
   currency: string;
   tiers: Tier[];
   addOns: AddOn[];
+  payment: PaymentSettings;
+};
+
+export type PaymentSettings = {
+  provider: 'manual' | 'stripe';
+  /** True when the fan pays at the moment they send the brief. */
+  chargeUpFront: boolean;
 };
 
 export type RequestStatus =
@@ -31,7 +38,7 @@ export type RequestStatus =
   | 'declined'
   | 'cancelled';
 
-export type PaymentStatus = 'unpaid' | 'paid' | 'refunded';
+export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'refunded';
 
 export type PublicRequest = {
   reference: string;

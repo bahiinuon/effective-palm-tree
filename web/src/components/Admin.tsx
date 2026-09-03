@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { adminList, adminUpdate, formatMoney, getCatalog } from '../api';
+import { adminCreateCheckout, adminList, adminUpdate, formatMoney, getCatalog } from '../api';
 import { STATUS_COPY } from './StatusLookup';
 import type { AdminRequest, Catalog, RequestStatus } from '../types';
 
@@ -164,7 +164,18 @@ export default function Admin() {
             </button>
 
             {openId === item.id && (
-              <RequestDetail request={item} onPatch={patch} nameOf={nameOf} />
+              <RequestDetail
+                request={item}
+                onPatch={patch}
+                nameOf={nameOf}
+                token={token}
+                canCharge={catalog?.payment.provider === 'stripe'}
+                onCharged={(updated) =>
+                  setItems((current) =>
+                    current.map((row) => (row.id === updated.id ? updated : row)),
+                  )
+                }
+              />
             )}
           </li>
         ))}
@@ -177,14 +188,37 @@ function RequestDetail({
   request,
   onPatch,
   nameOf,
+  token,
+  canCharge,
+  onCharged,
 }: {
   request: AdminRequest;
   onPatch: (id: string, body: Parameters<typeof adminUpdate>[2]) => Promise<void>;
   nameOf: (id: string) => string;
+  token: string;
+  canCharge: boolean;
+  onCharged: (request: AdminRequest) => void;
 }) {
   const [notes, setNotes] = useState(request.artistNotes ?? '');
   const [deliveryUrl, setDeliveryUrl] = useState(request.deliveryUrl ?? '');
   const [saving, setSaving] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
+
+  async function mintPaymentLink() {
+    setMinting(true);
+    setCheckoutError(null);
+    try {
+      const result = await adminCreateCheckout(token, request.id);
+      setCheckoutUrl(result.checkoutUrl);
+      onCharged(result.request);
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : 'Could not create a payment link.');
+    } finally {
+      setMinting(false);
+    }
+  }
 
   async function saveDetails() {
     setSaving(true);
@@ -247,7 +281,7 @@ function RequestDetail({
             value={request.paymentStatus}
             onChange={(e) => void onPatch(request.id, { paymentStatus: e.target.value })}
           >
-            {['unpaid', 'paid', 'refunded'].map((status) => (
+            {['unpaid', 'pending', 'paid', 'refunded'].map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>
@@ -255,6 +289,27 @@ function RequestDetail({
           </select>
         </label>
       </div>
+
+      {canCharge && request.paymentStatus !== 'paid' && (
+        <div className="payment-link">
+          <button type="button" className="secondary" onClick={() => void mintPaymentLink()} disabled={minting}>
+            {minting ? 'Asking Stripe…' : 'Create a payment link'}
+          </button>
+          {checkoutUrl && (
+            <p className="notice">
+              Send this to {request.fanName}:{' '}
+              <a href={checkoutUrl} target="_blank" rel="noreferrer">
+                {checkoutUrl}
+              </a>
+            </p>
+          )}
+          {checkoutError && (
+            <p className="notice error" role="alert">
+              {checkoutError}
+            </p>
+          )}
+        </div>
+      )}
 
       <label className="field">
         <span className="field-label">Delivery link</span>

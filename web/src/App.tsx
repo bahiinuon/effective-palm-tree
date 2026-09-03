@@ -6,9 +6,10 @@ import Admin from './components/Admin';
 type Route = 'request' | 'status' | 'admin';
 
 function currentRoute(): Route {
-  const hash = window.location.hash.replace(/^#\/?/, '');
-  if (hash === 'status') return 'status';
-  if (hash === 'admin') return 'admin';
+  // Stripe returns fans to #/status?ref=SR-XXXXXX, so strip any query first.
+  const path = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+  if (path === 'status') return 'status';
+  if (path === 'admin') return 'admin';
   return 'request';
 }
 
@@ -45,8 +46,8 @@ export default function App() {
 
       <footer className="site-footer">
         <p>
-          Every song is written from scratch for one person. Nothing is charged until we've agreed
-          the brief.
+          Every song is written from scratch for one person, and yours is never shared without your
+          say-so.
         </p>
         <a href="#/admin">Artist login</a>
       </footer>

@@ -55,6 +55,7 @@ export function createRequestStore(db) {
 
   const selectById = db.prepare('SELECT * FROM requests WHERE id = ?');
   const selectByReference = db.prepare('SELECT * FROM requests WHERE reference = ?');
+  const selectByPaymentRef = db.prepare('SELECT * FROM requests WHERE payment_ref = ?');
 
   return {
     create(input, pricing) {
@@ -107,6 +108,11 @@ export function createRequestStore(db) {
 
     getByReference(reference) {
       return toRecord(selectByReference.get(reference));
+    },
+
+    // Refund events name a payment intent rather than a request.
+    getByPaymentRef(paymentRef) {
+      return toRecord(selectByPaymentRef.get(paymentRef));
     },
 
     update(id, patch) {

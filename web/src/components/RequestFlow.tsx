@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatMoney, getCatalog, submitRequest } from '../api';
-import type { NewRequestInput } from '../api';
+import type { NewRequestInput, PaymentOutcome } from '../api';
 import { ApiError } from '../types';
 import type { AddOn, Catalog, PublicRequest, Tier } from '../types';
 
 type Confirmation = {
   request: PublicRequest;
-  payment: { provider: string; instructions?: string };
+  payment: PaymentOutcome;
 };
 
 const emptyForm = {
@@ -382,11 +382,16 @@ export default function RequestFlow() {
             )}
 
             <button type="submit" className="primary large" disabled={submitting}>
-              {submitting ? 'Sending…' : 'Send the brief'}
+              {submitting
+                ? 'Sending…'
+                : catalog.payment.chargeUpFront
+                  ? `Send the brief and pay ${formatMoney(total, catalog.currency)}`
+                  : 'Send the brief'}
             </button>
             <p className="fine-print">
-              Sending this doesn't charge you. I'll read it, come back to you, and only then send an
-              invoice.
+              {catalog.payment.chargeUpFront
+                ? 'Next step is Stripe’s secure checkout. Your card details never touch this site.'
+                : "Sending this doesn't charge you. I'll read it, come back to you, and only then send an invoice."}
             </p>
           </form>
         </div>
@@ -444,6 +449,20 @@ function ConfirmationPanel({
         {request.turnaroundDays} days once we start.
       </p>
       {payment.instructions && <p className="notice">{payment.instructions}</p>}
+
+      {payment.checkoutUrl && (
+        <div className="pay-now">
+          {/* Deliberately a click, not an automatic redirect: the fan gets to
+              write their reference down before they leave the site. */}
+          <a className="primary large link-button" href={payment.checkoutUrl}>
+            Pay {formatMoney(request.amountMinor, request.currency)} securely
+          </a>
+          <p className="fine-print">
+            Payment is handled by Stripe. Your song joins the queue the moment it clears.
+          </p>
+        </div>
+      )}
+
       <p>
         Keep that reference. You can check where the song's got to any time on the{' '}
         <a href="#/status">check a request</a> page with your reference and email.

@@ -39,11 +39,19 @@ export type NewRequestInput = {
   sharePublicly: boolean;
 };
 
+export type PaymentOutcome = {
+  provider: string;
+  status: string;
+  instructions?: string;
+  /** Present when the provider wants the fan sent to a hosted checkout. */
+  checkoutUrl?: string;
+};
+
 export const submitRequest = (input: NewRequestInput) =>
-  request<{ request: PublicRequest; payment: { provider: string; instructions?: string } }>(
-    '/api/requests',
-    { method: 'POST', body: JSON.stringify(input) },
-  );
+  request<{ request: PublicRequest; payment: PaymentOutcome }>('/api/requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 
 export const lookupRequest = (reference: string, email: string) =>
   request<{ request: PublicRequest }>(
@@ -72,6 +80,12 @@ export const adminUpdate = (
     method: 'PATCH',
     headers: auth(token),
     body: JSON.stringify(patch),
+  });
+
+export const adminCreateCheckout = (token: string, id: string) =>
+  request<{ request: AdminRequest; checkoutUrl: string }>(`/api/admin/requests/${id}/checkout`, {
+    method: 'POST',
+    headers: auth(token),
   });
 
 export function formatMoney(amountMinor: number, currency: string): string {

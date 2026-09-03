@@ -642,3 +642,31 @@ select:focus {
     scroll-behavior: auto !important;
   }
 }
+
+/* Payment ------------------------------------------------------------ */
+
+.pay-now {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.pay-now .link-button {
+  display: block;
+  padding: 1rem;
+  text-align: center;
+}
+
+.paid-notice {
+  border-left-color: var(--ok);
+  color: var(--ok);
+  margin: 1rem 0;
+}
+
+.payment-link {
+  margin: 0 0 1.25rem;
+}
+
+.payment-link .notice {
+  margin-top: 0.75rem;
+  overflow-wrap: anywhere;
+}
