@@ -75,7 +75,8 @@ money changes hands.
 
 Set `PAYMENT_PROVIDER=stripe` and the app runs Stripe Checkout. Card details
 never touch this server — the fan goes to a page hosted by Stripe and comes
-back to `#/status?ref=SR-XXXXXX`.
+back to `#/status?ref=SR-XXXXXX`. Out of the box nobody is charged until you
+have read their brief and said yes (see `STRIPE_CHARGE_AT` below).
 
 1. Put your secret key in `STRIPE_SECRET_KEY` (`sk_test_…` until you're ready).
 2. In the Stripe dashboard, add a webhook endpoint at
@@ -92,11 +93,11 @@ stripe listen --forward-to localhost:3001/api/webhooks/stripe
 
 `STRIPE_CHARGE_AT` decides when money is asked for:
 
-- `submit` (default) — the fan pays as they send the brief. The request sits at
-  `pending` until Stripe confirms, then flips to `paid`.
-- `accept` — the brief arrives free, and you press **Create a payment link** in
-  the queue once you've decided to take it on. That matches the "nothing is
-  charged until we've agreed the brief" promise.
+- `accept` (default) — the brief arrives free and nothing is sent to Stripe. You
+  read it, decide, and press **Create a payment link** in the queue. The fan is
+  told up front that a link comes only if you take the song on.
+- `submit` — the fan pays as they send the brief. The request sits at `pending`
+  until Stripe confirms, then flips to `paid`.
 
 Either way the amount charged is the total stored on the request, not a fresh
 catalog lookup — if you raise your prices between order and payment, the fan
@@ -132,7 +133,7 @@ pays what they agreed to.
 ## Not built yet
 
 Email to the fan (confirmation, delivery, revision requests), file upload for
-finished songs (the delivery link is a URL you paste), refund initiation from
-the queue (refunds made in the Stripe dashboard are picked up by webhook, but
-you can't start one here), and a public gallery of songs fans agreed to share —
+finished songs (the delivery link is a URL you paste), refund initiation (if you ever
+do refund one, do it in the Stripe dashboard — the webhook will mark the
+request `refunded` here), and a public gallery of songs fans agreed to share —
 `sharePublicly` is already recorded on every request, ready for it.

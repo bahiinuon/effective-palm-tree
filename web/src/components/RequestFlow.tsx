@@ -391,7 +391,9 @@ export default function RequestFlow() {
             <p className="fine-print">
               {catalog.payment.chargeUpFront
                 ? 'Next step is Stripe’s secure checkout. Your card details never touch this site.'
-                : "Sending this doesn't charge you. I'll read it, come back to you, and only then send an invoice."}
+                : `Sending this doesn't charge you. I'll read it, come back to you, and only then send ${
+                    catalog.payment.provider === 'stripe' ? 'a payment link' : 'an invoice'
+                  }.`}
             </p>
           </form>
         </div>

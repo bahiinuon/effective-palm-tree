@@ -54,7 +54,9 @@ function stripeProvider(env) {
 
   const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   const publicUrl = (env.PUBLIC_URL || 'http://localhost:3001').replace(/\/$/, '');
-  const chargeUpFront = (env.STRIPE_CHARGE_AT || 'submit') === 'submit';
+  // Default is 'accept': a brief arrives free, and a payment link goes out once
+  // the artist has read it and said yes. 'submit' takes the card up front.
+  const chargeUpFront = (env.STRIPE_CHARGE_AT || 'accept') === 'submit';
 
   // STRIPE_API_BASE exists so the test suite can point the SDK at a local stub.
   const options = {};

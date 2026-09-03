@@ -77,5 +77,11 @@ export function priceRequest(catalog, tierId, addOnIds = []) {
 }
 
 export function formatMoney(amountMinor, currency) {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amountMinor / 100);
+  // Round amounts read better without the trailing zeros - and this matches
+  // what the site itself shows, so the two never disagree in front of a fan.
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: amountMinor % 100 === 0 ? 0 : 2,
+  }).format(amountMinor / 100);
 }

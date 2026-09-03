@@ -51,7 +51,7 @@ function stripeSignature(payload, secret = WEBHOOK_SECRET) {
   return `t=${timestamp},v1=${signature}`;
 }
 
-describe('stripe checkout', () => {
+describe('stripe checkout, charging up front', () => {
   let stub;
   let app;
   let db;
@@ -69,6 +69,7 @@ describe('stripe checkout', () => {
       STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
       STRIPE_API_BASE: `http://127.0.0.1:${stripePort}`,
       PUBLIC_URL: 'https://songs.example',
+      STRIPE_CHARGE_AT: 'submit',
     });
 
     db = openDatabase(':memory:');
@@ -256,6 +257,125 @@ describe('stripe checkout', () => {
   }
 });
 
+describe('stripe checkout, charging on acceptance', () => {
+  let stub;
+  let app;
+  let db;
+  let base;
+
+  before(async () => {
+    process.env.ADMIN_TOKEN = 'test-admin-token';
+    stub = startStripeStub();
+    await new Promise((resolve) => stub.server.listen(0, '127.0.0.1', resolve));
+
+    const payments = createPaymentProvider({
+      PAYMENT_PROVIDER: 'stripe',
+      STRIPE_SECRET_KEY: 'sk_test_key',
+      STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      STRIPE_API_BASE: `http://127.0.0.1:${stub.server.address().port}`,
+      PUBLIC_URL: 'https://songs.example',
+      // No STRIPE_CHARGE_AT: this is the default the app ships with.
+    });
+
+    db = openDatabase(':memory:');
+    app = createApp({ db, payments, log: silent, rateLimitMax: 1000 }).listen(0);
+    await new Promise((resolve) => app.once('listening', resolve));
+    base = `http://127.0.0.1:${app.address().port}`;
+  });
+
+  after(() => {
+    app.close();
+    stub.server.close();
+    db.close();
+  });
+
+  const auth = { authorization: 'Bearer test-admin-token' };
+
+  it('tells the front end that nobody pays up front', async () => {
+    const body = await (await fetch(`${base}/api/catalog`)).json();
+    assert.deepEqual(body.payment, { provider: 'stripe', chargeUpFront: false });
+  });
+
+  it('takes a brief without touching Stripe or the fan\'s card', async () => {
+    const callsBefore = stub.calls.length;
+    const res = await fetch(`${base}/api/requests`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(brief),
+    });
+    const body = await res.json();
+
+    assert.equal(res.status, 201);
+    assert.equal(body.request.paymentStatus, 'unpaid');
+    assert.equal(body.payment.checkoutUrl, undefined, 'no checkout until the brief is accepted');
+    assert.match(body.payment.instructions, /payment link/);
+    assert.equal(stub.calls.length, callsBefore, 'Stripe is not called when a brief arrives');
+  });
+
+  it('mints the payment link when the artist takes the song on, then marks it paid', async () => {
+    await fetch(`${base}/api/requests`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...brief, subject: 'A leaving song for our head chef' }),
+    });
+
+    const { items } = await (
+      await fetch(`${base}/api/admin/requests?limit=200`, { headers: auth })
+    ).json();
+    const record = items.find((item) => item.subject === 'A leaving song for our head chef');
+
+    // Accepting the brief and asking for the money are two separate acts.
+    await fetch(`${base}/api/admin/requests/${record.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', ...auth },
+      body: JSON.stringify({ status: 'accepted' }),
+    });
+
+    const res = await fetch(`${base}/api/admin/requests/${record.id}/checkout`, {
+      method: 'POST',
+      headers: auth,
+    });
+    const body = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(body.checkoutUrl, 'https://checkout.stripe.com/c/pay/cs_test_123');
+    assert.equal(body.request.paymentStatus, 'pending');
+    assert.equal(body.request.status, 'accepted', 'asking for money does not move the queue');
+
+    const sent = new URLSearchParams(stub.calls.at(-1).body);
+    assert.equal(sent.get('line_items[0][price_data][unit_amount]'), '4500');
+
+    const event = JSON.stringify({
+      id: 'evt_accept',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          payment_status: 'paid',
+          payment_intent: 'pi_accept',
+          metadata: { requestId: record.id },
+        },
+      },
+    });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = createHmac('sha256', WEBHOOK_SECRET)
+      .update(`${timestamp}.${event}`)
+      .digest('hex');
+
+    await fetch(`${base}/api/webhooks/stripe`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'stripe-signature': `t=${timestamp},v1=${signature}`,
+      },
+      body: event,
+    });
+
+    const after = await (
+      await fetch(`${base}/api/admin/requests/${record.id}`, { headers: auth })
+    ).json();
+    assert.equal(after.request.paymentStatus, 'paid');
+  });
+});
+
 describe('payment provider configuration', () => {
   it('refuses to start on stripe without a secret key', () => {
     assert.throws(
@@ -268,11 +388,10 @@ describe('payment provider configuration', () => {
     assert.throws(() => createPaymentProvider({ PAYMENT_PROVIDER: 'cash' }), /Unknown/);
   });
 
-  it('holds off charging when STRIPE_CHARGE_AT is accept', async () => {
+  it('holds off charging by default, and says so in the promise it makes', async () => {
     const provider = createPaymentProvider({
       PAYMENT_PROVIDER: 'stripe',
       STRIPE_SECRET_KEY: 'sk_test_key',
-      STRIPE_CHARGE_AT: 'accept',
     });
     assert.equal(provider.chargeUpFront, false);
 
